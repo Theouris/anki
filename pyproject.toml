@@ -36,6 +36,12 @@ sphinx = [
 [tool.uv.workspace]
 members = ["pylib", "qt"]
 
+[tool.uv]
+override-dependencies = [
+  "pyqt6-qt6; sys_platform == 'win32' and platform_machine == 'ARM64' and python_version < '0'",
+  "pyqt6-webengine-qt6; sys_platform == 'win32' and platform_machine == 'ARM64' and python_version < '0'",
+]
+
 [[tool.uv.index]]
 name = "testpypi"
 url = "https://test.pypi.org/simple/"

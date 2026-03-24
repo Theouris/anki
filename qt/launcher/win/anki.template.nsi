@@ -24,7 +24,7 @@ Name "Anki"
 Unicode true
 
 ; The file to write (relative to nsis directory)
-OutFile "..\launcher_exe\anki-launcher-ANKI_VERSION-windows.exe"
+OutFile "..\launcher_exe\anki-launcher-ANKI_VERSION-windows-arm64.exe"
 
 ; Non elevated
 RequestExecutionLevel user

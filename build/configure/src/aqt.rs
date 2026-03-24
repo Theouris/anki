@@ -3,7 +3,6 @@
 
 use anyhow::Result;
 use ninja_gen::action::BuildAction;
-use ninja_gen::command::RunCommand;
 use ninja_gen::copy::CopyFile;
 use ninja_gen::copy::CopyFiles;
 use ninja_gen::glob;
@@ -22,6 +21,75 @@ use ninja_gen::Utf8PathBuf;
 use crate::anki_version;
 use crate::python::BuildWheel;
 use crate::web::copy_mathjax;
+
+fn add_windows_arm64_qt_env(build: &mut impl ninja_gen::build::FilesHandle) {
+    if !(cfg!(target_os = "windows") && cfg!(target_arch = "aarch64")) {
+        return;
+    }
+
+    let qt_root = std::env::var("ANKI_QT_ROOT")
+        .unwrap_or_else(|_| String::from(r"C:\vcpkg\installed\arm64-windows"));
+    let qt_bin = format!(r"{qt_root}\bin");
+    let qt_tools_bin = format!(r"{qt_root}\tools\Qt6\bin");
+    let qt_plugins = format!(r"{qt_root}\Qt6\plugins");
+    let webengine_process = format!(r"{qt_tools_bin}\QtWebEngineProcess.exe");
+    let locales_path = format!(r"{qt_root}\translations\qtwebengine_locales");
+    let resources_path = format!(r"{qt_root}\resources");
+
+    build.add_env_var("PATH", &format!(r"{qt_bin};{qt_tools_bin};$env:PATH"));
+    build.add_env_var("QT_PLUGIN_PATH", &qt_plugins);
+    build.add_env_var("QTWEBENGINEPROCESS_PATH", &webengine_process);
+    build.add_env_var("QTWEBENGINE_LOCALES_PATH", &locales_path);
+    build.add_env_var("QTWEBENGINE_RESOURCES_PATH", &resources_path);
+}
+
+struct PyenvQtCommand<'a> {
+    args: &'a str,
+    inputs: std::collections::HashMap<&'static str, ninja_gen::input::BuildInput>,
+    outputs: std::collections::HashMap<&'static str, Vec<&'a str>>,
+}
+
+impl BuildAction for PyenvQtCommand<'_> {
+    fn command(&self) -> &str {
+        "$cmd $args"
+    }
+
+    fn files(&mut self, build: &mut impl ninja_gen::build::FilesHandle) {
+        let mut args = self.args.to_string();
+        for (key, inputs) in &self.inputs {
+            let files = build.expand_inputs(inputs);
+            build.add_inputs("", inputs);
+            if !key.is_empty() {
+                args = args.replace(
+                    &format!("${key}"),
+                    &ninja_gen::input::space_separated(files),
+                );
+            }
+        }
+        for (key, outputs) in &self.outputs {
+            if !key.is_empty() {
+                let outputs = outputs.iter().map(|o| {
+                    if !o.starts_with("$builddir/") {
+                        format!("$builddir/{o}")
+                    } else {
+                        (*o).into()
+                    }
+                });
+                args = args.replace(
+                    &format!("${key}"),
+                    &ninja_gen::input::space_separated(outputs),
+                );
+            }
+        }
+
+        build.add_inputs("cmd", inputs![":pyenv:bin"]);
+        build.add_variable("args", args);
+        add_windows_arm64_qt_env(build);
+        for outputs in self.outputs.values() {
+            build.add_outputs("", outputs);
+        }
+    }
+}
 
 pub fn build_and_check_aqt(build: &mut Build) -> Result<()> {
     build_forms(build)?;
@@ -42,8 +110,7 @@ fn build_forms(build: &mut Build) -> Result<()> {
     }
     build.add_action(
         "qt:aqt:forms",
-        RunCommand {
-            command: ":pyenv:bin",
+        PyenvQtCommand {
             args: "$script $first_form",
             inputs: hashmap! {
                 "script" => inputs!["qt/tools/build_ui.py"],
@@ -65,8 +132,7 @@ fn build_forms(build: &mut Build) -> Result<()> {
 fn build_generated_sources(build: &mut Build) -> Result<()> {
     build.add_action(
         "qt:aqt:hooks.py",
-        RunCommand {
-            command: ":pyenv:bin",
+        PyenvQtCommand {
             args: "$script $out",
             inputs: hashmap! {
                 "script" => inputs!["qt/tools/genhooks_gui.py"],
@@ -79,8 +145,7 @@ fn build_generated_sources(build: &mut Build) -> Result<()> {
     )?;
     build.add_action(
         "qt:aqt:sass_vars",
-        RunCommand {
-            command: ":pyenv:bin",
+        PyenvQtCommand {
             args: "$script $root_scss $out",
             inputs: hashmap! {
                 "script" => inputs!["qt/tools/extract_sass_vars.py"],
@@ -249,8 +314,7 @@ fn build_icons(build: &mut Build) -> Result<()> {
     )?;
     build.add_action(
         "qt:aqt:data:qt:icons",
-        RunCommand {
-            command: ":pyenv:bin",
+        PyenvQtCommand {
             args: "$script $out $in",
             inputs: hashmap! {
                 "script" => inputs!["qt/tools/build_qrc.py"],

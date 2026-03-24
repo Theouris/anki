@@ -1,0 +1,16 @@
+[35mqt/launcher/lin/build.sh[m[36m:[m[32m47[m[36m:[m    cp "../../../[1;31mout/extracted/uv[m/uv" "$LAUNCHER_DIR/uv.amd64"
+[35mqt/launcher/lin/build.sh[m[36m:[m[32m48[m[36m:[m    cp "../../../[1;31mout/extracted/uv[m/uv" "$LAUNCHER_DIR/uv.arm64"
+[35mqt/launcher/lin/build.sh[m[36m:[m[32m53[m[36m:[m    cp "../../../[1;31mout/extracted/uv[m/uv" "$LAUNCHER_DIR/uv.amd64"
+[35mqt/launcher/lin/build.sh[m[36m:[m[32m54[m[36m:[m    cp "../../../[1;31mout/extracted/uv[m_lin_arm/uv" "$LAUNCHER_DIR/uv.arm64"
+[35mqt/launcher/src/bin/build_win.rs[m[36m:[m[32m153[m[36m:[m    let uv_src = PathBuf::from("../../../[1;31mout/extracted/uv[m/uv.exe");
+[35mqt/launcher/src/bin/build_win.rs[m[36m:[m[32m156[m[36m:[m    let uvw_src = PathBuf::from("../../../[1;31mout/extracted/uv[m/uvw.exe");
+[35mqt/mac/build.sh[m[36m:[m[32m19[m[36m:[m"$PROJ_ROOT/[1;31mout/extracted/uv[m/uv" build --wheel
+[35mqt/mac/update-launcher-env[m[36m:[m[32m13[m[36m:[m../../[1;31mout/extracted/uv[m/uv pip install dist/*.whl
+[35mqt/release/build.sh[m[36m:[m[32m14[m[36m:[mUV="$PROJ_ROOT/[1;31mout/extracted/uv[m/uv"
+[35mtools/publish[m[36m:[m[32m7[m[36m:[m#[1;31mout/extracted/uv[m/uv publish --index testpypi out/wheels/*
+[35mtools/publish[m[36m:[m[32m12[m[36m:[m[1;31mout/extracted/uv[m/uv publish out/wheels/!(anki_release*).whl
+[35mtools/publish[m[36m:[m[32m14[m[36m:[m[1;31mout/extracted/uv[m/uv publish out/wheels/anki_release*.whl
+[35mtools/run-qt6.6[m[36m:[m[32m8[m[36m:[mUV_PROJECT_ENVIRONMENT=$PYENV ./[1;31mout/extracted/uv[m/uv sync --all-packages --extra qt66
+[35mtools/run-qt6.7[m[36m:[m[32m8[m[36m:[mUV_PROJECT_ENVIRONMENT=$PYENV ./[1;31mout/extracted/uv[m/uv sync --all-packages --extra qt67
+[35mtools/run-qt6.8[m[36m:[m[32m8[m[36m:[mUV_PROJECT_ENVIRONMENT=$PYENV ./[1;31mout/extracted/uv[m/uv sync --all-packages --extra qt68
+[35mtools/update-launcher-env[m[36m:[m[32m14[m[36m:[m./[1;31mout/extracted/uv[m/uv pip install out/wheels/*

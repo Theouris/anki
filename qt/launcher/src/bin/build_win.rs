@@ -17,10 +17,42 @@ const OUTPUT_DIR: &str = "../../../out/launcher";
 const LAUNCHER_EXE_DIR: &str = "../../../out/launcher_exe";
 const NSIS_DIR: &str = "../../../out/nsis";
 const CARGO_TARGET_DIR: &str = "../../../out/rust";
-const NSIS_PATH: &str = "C:\\Program Files (x86)\\NSIS\\makensis.exe";
+
+fn find_makensis() -> Result<PathBuf> {
+    if let Ok(path) = env::var("NSIS_PATH") {
+        let pb = PathBuf::from(path);
+        if pb.exists() {
+            return Ok(pb);
+        }
+    }
+
+    let output = Command::new("where").arg("makensis").utf8_output()?;
+    for line in output.stdout.lines() {
+        let candidate = PathBuf::from(line.trim());
+        if candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+
+    anyhow::bail!(
+        "Could not find makensis.exe. Install NSIS or set NSIS_PATH to its full path."
+    );
+}
+
+fn windows_target() -> String {
+    env::var("ANKI_WIN_TARGET").unwrap_or_else(|_| "aarch64-pc-windows-msvc".to_string())
+}
+
+fn windows_installer_tag(target: &str) -> &'static str {
+    match target {
+        "aarch64-pc-windows-msvc" => "windows-arm64",
+        _ => "windows",
+    }
+}
 
 fn main() -> Result<()> {
-    println!("Building Windows launcher...");
+    let target = windows_target();
+    println!("Building Windows launcher for target: {target}...");
 
     // Read version early so it can be used throughout the build process
     let version = std::fs::read_to_string("../../../.version")?
@@ -42,12 +74,14 @@ fn main() -> Result<()> {
     generate_install_manifest(&output_dir)?;
     build_installer(&output_dir, &nsis_dir)?;
 
-    let installer_filename = format!("anki-launcher-{version}-windows.exe");
+    let installer_filename =
+        format!("anki-launcher-{version}-{}.exe", windows_installer_tag(&target));
     let installer_path = PathBuf::from("../../../out/launcher_exe").join(&installer_filename);
 
     sign_file(&installer_path)?;
 
     println!("Build completed successfully!");
+    println!("Target: {target}");
     println!("Output directory: {}", output_dir.display());
     println!("Installer: ../../../out/launcher_exe/{installer_filename}");
 
@@ -77,7 +111,8 @@ fn setup_directories(output_dir: &Path, launcher_exe_dir: &Path, nsis_dir: &Path
 }
 
 fn build_launcher_binary() -> Result<()> {
-    println!("Building launcher binary...");
+    let target = windows_target();
+    println!("Building launcher binary for {target}...");
 
     env::set_var("CARGO_TARGET_DIR", CARGO_TARGET_DIR);
 
@@ -88,7 +123,7 @@ fn build_launcher_binary() -> Result<()> {
             "launcher",
             "--release",
             "--target",
-            "x86_64-pc-windows-msvc",
+            &target,
         ])
         .ensure_success()?;
 
@@ -115,17 +150,22 @@ fn extract_nsis_plugins() -> Result<()> {
 }
 
 fn copy_files(output_dir: &Path) -> Result<()> {
-    println!("Copying binaries...");
+    let target = windows_target();
+    println!("Copying binaries for {target}...");
 
     // Copy launcher binary as anki.exe
-    let launcher_src =
-        PathBuf::from(CARGO_TARGET_DIR).join("x86_64-pc-windows-msvc/release/launcher.exe");
+    let launcher_src = PathBuf::from(CARGO_TARGET_DIR)
+        .join(&target)
+        .join("release")
+        .join("launcher.exe");
     let launcher_dst = output_dir.join("anki.exe");
     copy_file(&launcher_src, &launcher_dst)?;
 
     // Copy anki-console binary
-    let console_src =
-        PathBuf::from(CARGO_TARGET_DIR).join("x86_64-pc-windows-msvc/release/anki-console.exe");
+    let console_src = PathBuf::from(CARGO_TARGET_DIR)
+        .join(&target)
+        .join("release")
+        .join("anki-console.exe");
     let console_dst = output_dir.join("anki-console.exe");
     copy_file(&console_src, &console_dst)?;
 
@@ -133,9 +173,9 @@ fn copy_files(output_dir: &Path) -> Result<()> {
     let uv_src = PathBuf::from("../../../out/extracted/uv/uv.exe");
     let uv_dst = output_dir.join("uv.exe");
     copy_file(&uv_src, &uv_dst)?;
-    let uv_src = PathBuf::from("../../../out/extracted/uv/uvw.exe");
-    let uv_dst = output_dir.join("uvw.exe");
-    copy_file(&uv_src, &uv_dst)?;
+    let uvw_src = PathBuf::from("../../../out/extracted/uv/uvw.exe");
+    let uvw_dst = output_dir.join("uvw.exe");
+    copy_file(&uvw_src, &uvw_dst)?;
 
     println!("Copying support files...");
 
@@ -150,6 +190,20 @@ fn copy_files(output_dir: &Path) -> Result<()> {
 
     // Copy versions.py
     copy_file("../versions.py", output_dir.join("versions.py"))?;
+
+    // Copy bundled wheels
+    let bundled_wheels_src = PathBuf::from("../wheels");
+    let bundled_wheels_dst = output_dir.join("wheels");
+    create_dir_all(&bundled_wheels_dst)?;
+
+    for entry in std::fs::read_dir(&bundled_wheels_src)? {
+        let entry = entry?;
+        let src = entry.path();
+        if src.is_file() {
+            let dst = bundled_wheels_dst.join(entry.file_name());
+            copy_file(&src, &dst)?;
+        }
+    }
 
     Ok(())
 }
@@ -204,7 +258,7 @@ fn find_signtool() -> Result<PathBuf> {
         ])
         .utf8_output()?;
 
-    // Find signtool.exe with "arm64" in the path (as per original batch logic)
+    // Find signtool.exe with "arm64" in the path
     for line in output.stdout.lines() {
         if line.contains("\\arm64\\") {
             let signtool_path = PathBuf::from(line.trim());
@@ -247,15 +301,16 @@ fn generate_install_manifest(output_dir: &Path) -> Result<()> {
 fn copy_nsis_files(nsis_dir: &Path, version: &str) -> Result<()> {
     println!("Copying NSIS support files...");
 
-    // Copy anki.template.nsi as anki.nsi and substitute version placeholders
     let template_content = std::fs::read_to_string("anki.template.nsi")?;
-    let substituted_content = template_content.replace("ANKI_VERSION", version);
+    let target = windows_target();
+    let platform = windows_installer_tag(&target);
+    let substituted_content = template_content
+        .replace("ANKI_VERSION", version)
+        .replace("ANKI_PLATFORM", platform);
     write_file(nsis_dir.join("anki.nsi"), substituted_content)?;
 
-    // Copy fileassoc.nsh
     copy_file("fileassoc.nsh", nsis_dir.join("fileassoc.nsh"))?;
 
-    // Copy nsProcess.dll
     copy_file(
         "../../../out/extracted/nsis_plugins/nsProcess.dll",
         nsis_dir.join("nsProcess.dll"),
@@ -307,7 +362,9 @@ fn build_installer(_output_dir: &Path, nsis_dir: &Path) -> Result<()> {
 }
 
 fn run_nsis(script_path: &Path, flags: &[&str], working_dir: &Path) -> Result<()> {
-    let mut cmd = Command::new(NSIS_PATH);
+    let makensis = find_makensis()?;
+
+    let mut cmd = Command::new(&makensis);
     cmd.args(flags).arg(script_path).current_dir(working_dir);
 
     cmd.ensure_success()?;

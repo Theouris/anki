@@ -4,5 +4,15 @@ version = "1.0.0"
 description = "UV-based launcher for Anki."
 requires-python = ">=3.9"
 dependencies = [
-  "anki-release",
+  "anki==25.9.2",
+  "aqt==25.9.2",
 ]
+
+[tool.uv]
+required-environments = [
+  "sys_platform == 'win32' and platform_machine == 'ARM64'",
+]
+
+[tool.uv.sources]
+anki = { path = "./wheels/anki-25.9.2-cp39-abi3-win_arm64.whl" }
+aqt = { path = "./wheels/aqt-25.9.2-py3-none-any.whl" }

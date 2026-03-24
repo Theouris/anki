@@ -192,7 +192,10 @@ fn maybe_update_env_file(build_root: &Utf8Path) {
     let build_root_env = env::var("BUILD_ROOT").unwrap_or_default();
     let release = env::var("RELEASE").unwrap_or_default();
     let other_watched_env = env::var("RECONFIGURE_KEY").unwrap_or_default();
-    let current_env = format!("{build_root_env};{release};{other_watched_env}");
+    let win_arm64 = env::var("WIN_ARM64").unwrap_or_default();
+    let anki_qt_root = env::var("ANKI_QT_ROOT").unwrap_or_default();
+    let current_env =
+        format!("{build_root_env};{release};{other_watched_env};{win_arm64};{anki_qt_root}");
 
     write_if_changed(&env_file, &current_env);
 }
